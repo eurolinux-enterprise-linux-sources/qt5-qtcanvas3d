@@ -1,34 +1,26 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCanvas3D module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:GPL-EXCEPT$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
-**
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 3 as published by the Free Software
+** Foundation with exceptions as appearing in the file LICENSE.GPL3-EXCEPT
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -159,7 +151,7 @@ Item {
             activeContent.updateTexture(shaderEffectSource)
             waitForRendering(canvas3d)
 
-            tryCompare(activeContent.readyTexturesCount() === 1)
+            tryCompare(activeContent.readyTextures, "length", 1)
             tryCompare(top, "renderOk", true)
             tryCompare(top, "red", 0x10)
             tryCompare(top, "green", 0x20)
@@ -170,7 +162,7 @@ Item {
             activeContent.updateTexture(shaderEffectSource2)
             waitForRendering(canvas3d)
 
-            tryCompare(activeContent.readyTexturesCount() === 1)
+            tryCompare(activeContent.readyTextures, "length", 1)
             tryCompare(top, "renderOk", true)
             tryCompare(top, "red", 0x12)
             tryCompare(top, "green", 0x22)
@@ -180,7 +172,7 @@ Item {
             // testRect3 is layered
             resetRenderCheck()
             activeContent.updateTexture(testRect3)
-            tryCompare(activeContent.readyTexturesCount() === 1)
+            tryCompare(activeContent.readyTextures, "length", 1)
             waitForRendering(canvas3d)
 
             tryCompare(top, "renderOk", true)
@@ -193,7 +185,7 @@ Item {
             testRect.color = "#405060"
             resetRenderCheck()
             activeContent.updateTexture(shaderEffectSource)
-            tryCompare(activeContent.readyTexturesCount() === 1)
+            tryCompare(activeContent.readyTextures, "length", 1)
 
             waitForRendering(canvas3d)
 
@@ -301,7 +293,7 @@ Item {
             activeContent.updateTexture(testRect2)
             activeContent.updateTexture(testRect3)
 
-            tryCompare(activeContent.readyTexturesCount() === 3)
+            tryCompare(activeContent.readyTextures, "length", 3)
         }
     }
 }

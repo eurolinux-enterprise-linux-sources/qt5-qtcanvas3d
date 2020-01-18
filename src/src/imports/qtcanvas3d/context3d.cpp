@@ -1,34 +1,37 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCanvas3D module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:LGPL$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
 ** GNU Lesser General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU Lesser
 ** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
+** Foundation and appearing in the file LICENSE.LGPL3 included in the
 ** packaging of this file. Please review the following information to
 ** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** will be met: https://www.gnu.org/licenses/lgpl-3.0.html.
 **
 ** GNU General Public License Usage
 ** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** General Public License version 2.0 or (at your option) the GNU General
+** Public license version 3 or any later version approved by the KDE Free
+** Qt Foundation. The licenses are as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL2 and LICENSE.GPL3
+** included in the packaging of this file. Please review the following
+** information to ensure the GNU General Public License requirements will
+** be met: https://www.gnu.org/licenses/gpl-2.0.html and
+** https://www.gnu.org/licenses/gpl-3.0.html.
 **
 ** $QT_END_LICENSE$
 **
@@ -91,6 +94,7 @@ CanvasContext::CanvasContext(QQmlEngine *engine, bool isES2, int maxVertexAttrib
     m_v4engine(QQmlEnginePrivate::getV4Engine(engine)),
     m_unpackFlipYEnabled(false),
     m_unpackPremultiplyAlphaEnabled(false),
+    m_unpackAlignmentValue(4),
     m_devicePixelRatio(1.0),
     m_currentProgram(0),
     m_currentArrayBuffer(0),
@@ -125,8 +129,8 @@ CanvasContext::~CanvasContext()
     EnumToStringMap::deleteInstance();
 
     // Cleanup quick item textures to avoid crash when parent gets deleted before children
-    QList<CanvasTexture *> quickItemTextures = m_quickItemToTextureMap.values();
-    foreach (CanvasTexture *texture, quickItemTextures)
+    const QList<CanvasTexture *> quickItemTextures = m_quickItemToTextureMap.values();
+    for (CanvasTexture *texture : quickItemTextures)
         texture->del();
 }
 
@@ -1098,6 +1102,8 @@ void CanvasContext::texImage2D(glEnums target, int level, glEnums internalformat
             qCWarning(canvas3drendering).nospace() << "Context3D::" << __FUNCTION__
                                                    << ":INVALID_ENUM:Invalid format supplied "
                                                    << glEnumToString(format);
+            if (deleteTempPixels)
+                delete[] srcData;
             return;
         }
 
@@ -1355,6 +1361,11 @@ QByteArray *CanvasContext::unpackPixels(uchar *srcData, bool useSrcDataAsDst,
                                          << ")";
 
     int bytesPerRow = width * bytesPerPixel;
+
+    // Align bytesPerRow to UNPACK_ALIGNMENT setting
+    if ( m_unpackAlignmentValue > 1)
+        bytesPerRow = bytesPerRow + (m_unpackAlignmentValue - 1) - (bytesPerRow - 1) % m_unpackAlignmentValue;
+
     int totalBytes = bytesPerRow * height;
 
     QByteArray *unpackedData = 0;
@@ -2354,7 +2365,7 @@ QJSValue CanvasContext::getAttachedShaders(QJSValue program3D)
     QJSValue shaderList = m_engine->newArray(shaders.count());
 
     for (QList<CanvasShader *>::const_iterator iter = shaders.constBegin();
-         iter != shaders.constEnd(); iter++) {
+         iter != shaders.constEnd(); ++iter) {
         CanvasShader *shader = *iter;
         shaderList.setProperty(index++, m_engine->newQObject((CanvasShader *)shader));
     }
@@ -2493,10 +2504,28 @@ void CanvasContext::pixelStorei(glEnums pname, int param)
     case UNPACK_COLORSPACE_CONVERSION_WEBGL:
         // Intentionally ignored
         break;
-    case PACK_ALIGNMENT: // Intentional fall-through
+    case PACK_ALIGNMENT:
+        if ( param == 1 || param == 2 || param == 4 || param == 8 ) {
+            m_commandQueue->queueCommand(CanvasGlCommandQueue::glPixelStorei,
+                                         GLint(pname), GLint(param));
+        } else {
+            m_error |= CANVAS_INVALID_VALUE;
+            qCWarning(canvas3drendering).nospace() << "Context3D::" << __FUNCTION__
+                                                   << ":INVALID_VALUE:"
+                                                   << "Invalid pack alignment: " << param;
+        }
+        break;
     case UNPACK_ALIGNMENT:
-        m_commandQueue->queueCommand(CanvasGlCommandQueue::glPixelStorei,
-                                     GLint(pname), GLint(param));
+        if ( param == 1 || param == 2 || param == 4 || param == 8 ) {
+            m_unpackAlignmentValue = param;
+            m_commandQueue->queueCommand(CanvasGlCommandQueue::glPixelStorei,
+                                         GLint(pname), GLint(param));
+        } else {
+            m_error |= CANVAS_INVALID_VALUE;
+            qCWarning(canvas3drendering).nospace() << "Context3D::" << __FUNCTION__
+                                                   << ":INVALID_VALUE:"
+                                                   << "Invalid unpack alignment: " << param;
+        }
         break;
     default:
         qCWarning(canvas3drendering).nospace() << "Context3D::" << __FUNCTION__
@@ -4395,7 +4424,8 @@ QJSValue CanvasContext::getParameter(glEnums pname)
                                               QV4::Heap::TypedArray::Float32Array]);
         QV4::ScopedCallData callData(scope, 1);
         callData->args[0] = buffer;
-        return QJSValue(m_v4engine, constructor->construct(callData));
+        constructor->construct(scope, callData);
+        return QJSValue(m_v4engine, scope.result.asReturnedValue());
     }
 
         // Float32Array (with 4 values)
@@ -4415,7 +4445,8 @@ QJSValue CanvasContext::getParameter(glEnums pname)
                                               QV4::Heap::TypedArray::Float32Array]);
         QV4::ScopedCallData callData(scope, 1);
         callData->args[0] = buffer;
-        return QJSValue(m_v4engine, constructor->construct(callData));
+        constructor->construct(scope, callData);
+        return QJSValue(m_v4engine, scope.result.asReturnedValue());
     }
 
         // Int32Array (with 2 elements)
@@ -4432,7 +4463,8 @@ QJSValue CanvasContext::getParameter(glEnums pname)
                                               QV4::Heap::TypedArray::Int32Array]);
         QV4::ScopedCallData callData(scope, 1);
         callData->args[0] = buffer;
-        return QJSValue(m_v4engine, constructor->construct(callData));
+        constructor->construct(scope, callData);
+        return QJSValue(m_v4engine, scope.result.asReturnedValue());
     }
         // Int32Array (with 4 elements)
         // Intentional flow through
@@ -4450,7 +4482,8 @@ QJSValue CanvasContext::getParameter(glEnums pname)
                                               QV4::Heap::TypedArray::Int32Array]);
         QV4::ScopedCallData callData(scope, 1);
         callData->args[0] = buffer;
-        return QJSValue(m_v4engine, constructor->construct(callData));
+        constructor->construct(scope, callData);
+        return QJSValue(m_v4engine, scope.result.asReturnedValue());
     }
 
         // sequence<GLboolean> (with 4 values)
@@ -4516,22 +4549,21 @@ QJSValue CanvasContext::getParameter(glEnums pname)
     case COMPRESSED_TEXTURE_FORMATS: {
         syncCommand.i1 = GLint(GL_NUM_COMPRESSED_TEXTURE_FORMATS);
         scheduleSyncCommand(&syncCommand);
+        QV4::Scope scope(m_v4engine);
+        QV4::Scoped<QV4::ArrayBuffer> buffer(scope,
+                                             m_v4engine->newArrayBuffer(sizeof(int) * value));
         if (value > 0) {
-            QV4::Scope scope(m_v4engine);
-            QV4::Scoped<QV4::ArrayBuffer> buffer(scope,
-                                                 m_v4engine->newArrayBuffer(sizeof(int) * value));
-
             syncCommand.i1 = GLint(pname);
             syncCommand.returnValue = buffer->data();
             scheduleSyncCommand(&syncCommand);
-
-            QV4::ScopedFunctionObject constructor(scope,
-                                                  m_v4engine->typedArrayCtors[
-                                                  QV4::Heap::TypedArray::UInt32Array]);
-            QV4::ScopedCallData callData(scope, 1);
-            callData->args[0] = buffer;
-            return QJSValue(m_v4engine, constructor->construct(callData));
         }
+        QV4::ScopedFunctionObject constructor(scope,
+                                              m_v4engine->typedArrayCtors[
+                                              QV4::Heap::TypedArray::UInt32Array]);
+        QV4::ScopedCallData callData(scope, 1);
+        callData->args[0] = buffer;
+        constructor->construct(scope, callData);
+        return QJSValue(m_v4engine, scope.result.asReturnedValue());
     }
     case FRAMEBUFFER_BINDING: {
         return m_engine->newQObject(m_currentFramebuffer);
@@ -5672,7 +5704,8 @@ QJSValue CanvasContext::getVertexAttrib(uint index, glEnums pname)
                                                       QV4::Heap::TypedArray::Float32Array]);
                 QV4::ScopedCallData callData(scope, 1);
                 callData->args[0] = buffer;
-                return QJSValue(m_v4engine, constructor->construct(callData));
+                constructor->construct(scope, callData);
+                return QJSValue(m_v4engine, scope.result.asReturnedValue());
             }
         }
         default:
@@ -5823,9 +5856,9 @@ QJSValue CanvasContext::getUniform(QJSValue program3D, QJSValue location3D)
                                   locationId);
         switch (type) {
         case SAMPLER_2D:
-            // Intentional flow through
+            Q_FALLTHROUGH(); // Intentional flow through
         case SAMPLER_CUBE:
-            // Intentional flow through
+            Q_FALLTHROUGH(); // Intentional flow through
         case INT: {
             GLint value = 0;
             syncCommand.returnValue = &value;
@@ -5856,10 +5889,10 @@ QJSValue CanvasContext::getUniform(QJSValue program3D, QJSValue location3D)
         }
         case INT_VEC2:
             numValues--;
-            // Intentional flow through
+            Q_FALLTHROUGH(); // Intentional flow through
         case INT_VEC3:
             numValues--;
-            // Intentional flow through
+            Q_FALLTHROUGH(); // Intentional flow through
         case INT_VEC4: {
             QV4::Scope scope(m_v4engine);
             QV4::Scoped<QV4::ArrayBuffer> buffer(scope,
@@ -5875,15 +5908,16 @@ QJSValue CanvasContext::getUniform(QJSValue program3D, QJSValue location3D)
                                                       QV4::Heap::TypedArray::Int32Array]);
                 QV4::ScopedCallData callData(scope, 1);
                 callData->args[0] = buffer;
-                return QJSValue(m_v4engine, constructor->construct(callData));
+                constructor->construct(scope, callData);
+                return QJSValue(m_v4engine, scope.result.asReturnedValue());
             }
         }
         case FLOAT_VEC2:
             numValues--;
-            // Intentional flow through
+            Q_FALLTHROUGH(); // Intentional flow through
         case FLOAT_VEC3:
             numValues--;
-            // Intentional flow through
+            Q_FALLTHROUGH(); // Intentional flow through
         case FLOAT_VEC4: {
             QV4::Scope scope(m_v4engine);
             QV4::Scoped<QV4::ArrayBuffer> buffer(scope,
@@ -5900,15 +5934,16 @@ QJSValue CanvasContext::getUniform(QJSValue program3D, QJSValue location3D)
                                                       QV4::Heap::TypedArray::Float32Array]);
                 QV4::ScopedCallData callData(scope, 1);
                 callData->args[0] = buffer;
-                return QJSValue(m_v4engine, constructor->construct(callData));
+                constructor->construct(scope, callData);
+                return QJSValue(m_v4engine, scope.result.asReturnedValue());
             }
         }
         case BOOL_VEC2:
             numValues--;
-            // Intentional flow through
+            Q_FALLTHROUGH(); // Intentional flow through
         case BOOL_VEC3:
             numValues--;
-            // Intentional flow through
+            Q_FALLTHROUGH(); // Intentional flow through
         case BOOL_VEC4: {
             GLint *value = new GLint[numValues];
             QJSValue array = m_engine->newArray(numValues);
@@ -5927,10 +5962,10 @@ QJSValue CanvasContext::getUniform(QJSValue program3D, QJSValue location3D)
         }
         case FLOAT_MAT2:
             numValues--;
-            // Intentional flow through
+            Q_FALLTHROUGH(); // Intentional flow through
         case FLOAT_MAT3:
             numValues--;
-            // Intentional flow through
+            Q_FALLTHROUGH(); // Intentional flow through
         case FLOAT_MAT4: {
             numValues = numValues * numValues;
             QV4::Scope scope(m_v4engine);
@@ -5948,7 +5983,8 @@ QJSValue CanvasContext::getUniform(QJSValue program3D, QJSValue location3D)
                                                       QV4::Heap::TypedArray::Float32Array]);
                 QV4::ScopedCallData callData(scope, 1);
                 callData->args[0] = buffer;
-                return QJSValue(m_v4engine, constructor->construct(callData));
+                constructor->construct(scope, callData);
+                return QJSValue(m_v4engine, scope.result.asReturnedValue());
             }
         }
         default:
@@ -6111,9 +6147,9 @@ void CanvasContext::setContextLostState(bool lost)
         m_error = CANVAS_NO_ERRORS;
 
         if (lost) {
-            foreach (CanvasAbstractObject *jsObj, m_validObjectMap.keys()) {
-                jsObj->setInvalidated(true);
-                disconnect(jsObj, &QObject::destroyed, this, &CanvasContext::handleObjectDeletion);
+            for (auto it = m_validObjectMap.cbegin(), end = m_validObjectMap.cend(); it != end; ++it) {
+                it.key()->setInvalidated(true);
+                disconnect(it.key(), &QObject::destroyed, this, &CanvasContext::handleObjectDeletion);
             }
             m_validObjectMap.clear();
             m_quickItemToTextureMap.clear();
@@ -6144,7 +6180,7 @@ void CanvasContext::markQuickTexturesDirty()
         QMap<QQuickItem *, CanvasTexture *>::iterator i = m_quickItemToTextureMap.begin();
         while (i != m_quickItemToTextureMap.end()) {
             m_commandQueue->addQuickItemAsTexture(i.key(), i.value()->textureId());
-            i++;
+            ++i;
         }
     }
 }

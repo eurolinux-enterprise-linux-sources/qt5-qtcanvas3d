@@ -1,34 +1,48 @@
 /****************************************************************************
 **
-** Copyright (C) 2015 The Qt Company Ltd.
-** Contact: http://www.qt.io/licensing/
+** Copyright (C) 2016 The Qt Company Ltd.
+** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtCanvas3D module of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL3$
+** $QT_BEGIN_LICENSE:BSD$
 ** Commercial License Usage
 ** Licensees holding valid commercial Qt licenses may use this file in
 ** accordance with the commercial license agreement provided with the
 ** Software or, alternatively, in accordance with the terms contained in
 ** a written agreement between you and The Qt Company. For licensing terms
-** and conditions see http://www.qt.io/terms-conditions. For further
-** information use the contact form at http://www.qt.io/contact-us.
+** and conditions see https://www.qt.io/terms-conditions. For further
+** information use the contact form at https://www.qt.io/contact-us.
 **
-** GNU Lesser General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU Lesser
-** General Public License version 3 as published by the Free Software
-** Foundation and appearing in the file LICENSE.LGPLv3 included in the
-** packaging of this file. Please review the following information to
-** ensure the GNU Lesser General Public License version 3 requirements
-** will be met: https://www.gnu.org/licenses/lgpl.html.
+** BSD License Usage
+** Alternatively, you may use this file under the terms of the BSD license
+** as follows:
 **
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU
-** General Public License version 2.0 or later as published by the Free
-** Software Foundation and appearing in the file LICENSE.GPL included in
-** the packaging of this file. Please review the following information to
-** ensure the GNU General Public License version 2.0 requirements will be
-** met: http://www.gnu.org/licenses/gpl-2.0.html.
+** "Redistribution and use in source and binary forms, with or without
+** modification, are permitted provided that the following conditions are
+** met:
+**   * Redistributions of source code must retain the above copyright
+**     notice, this list of conditions and the following disclaimer.
+**   * Redistributions in binary form must reproduce the above copyright
+**     notice, this list of conditions and the following disclaimer in
+**     the documentation and/or other materials provided with the
+**     distribution.
+**   * Neither the name of The Qt Company Ltd nor the names of its
+**     contributors may be used to endorse or promote products derived
+**     from this software without specific prior written permission.
+**
+**
+** THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+** "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+** LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+** A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+** OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+** SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+** LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+** OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE."
 **
 ** $QT_END_LICENSE$
 **
@@ -59,9 +73,11 @@ var planetScale;
 var cameraDistance;
 
 var objects = []; // Planet objects
+var hitObjects = []; // Planet hit detection objects
 var planets = []; // Planet data info
 
 var commonGeometry;
+var hitGeometry;
 var solarDistance = 2600000;
 var saturnOuterRadius = 120.700;
 var uranusOuterRadius = 40;
@@ -222,6 +238,7 @@ function createPlanets() {
     objects = [];
 
     commonGeometry = new THREE.BufferGeometry().fromGeometry(new THREE.SphereGeometry(1, 64, 64));
+    hitGeometry = new THREE.BufferGeometry().fromGeometry(new THREE.SphereGeometry(1, 8, 8));
 
     var ringSegments = 70;
     var mesh, innerRadius, outerRadius, ring;
@@ -287,18 +304,21 @@ function createPlanets() {
 
         objects.push(mesh);
         scene.add(mesh);
+
+        // Create separate meshes for click detection
+        var hitMesh = new THREE.Mesh(hitGeometry);
+        hitMesh.visible = false;
+        hitObjects.push(hitMesh);
+        scene.add(hitMesh);
     }
 
 }
 
 function createSun(radius) {
 
-    var texture = THREE.ImageUtils.loadTexture('images/sunmap.jpg');
-    var material = new THREE.MeshBasicMaterial({
-                                                   map: texture,
-                                                   bumpMap: texture,
-                                                   bumpScale: 0.05
-                                               });
+    var textureLoader = new THREE.TextureLoader();
+    var texture = textureLoader.load('images/sunmap.jpg');
+    var material = new THREE.MeshBasicMaterial({ map: texture });
     var mesh = new THREE.Mesh(commonGeometry, material);
     mesh.scale.set(radius, radius, radius);
 
@@ -310,14 +330,15 @@ function createSun(radius) {
 
 function createPlanet(radius, bumpMapScale, mapTexture, bumpTexture, specularTexture) {
 
+    var textureLoader = new THREE.TextureLoader();
     var material = new THREE.MeshPhongMaterial({
-                                                   map: THREE.ImageUtils.loadTexture(mapTexture),
-                                                   bumpMap: THREE.ImageUtils.loadTexture(bumpTexture),
+                                                   map: textureLoader.load(mapTexture),
+                                                   bumpMap: textureLoader.load(bumpTexture),
                                                    bumpScale: bumpMapScale
                                                });
 
     if (specularTexture) {
-        material.specularMap = THREE.ImageUtils.loadTexture(specularTexture);
+        material.specularMap = textureLoader.load(specularTexture);
         material.specular = new THREE.Color('grey');
         material.shininess = 50.0;
     } else {
@@ -333,8 +354,9 @@ function createPlanet(radius, bumpMapScale, mapTexture, bumpTexture, specularTex
 
 function createEarthCloud(earthMesh) {
 
+    var textureLoader = new THREE.TextureLoader();
     var material = new THREE.MeshPhongMaterial({
-                                                   map: THREE.ImageUtils.loadTexture('qrc:images/earthcloudmapcolortrans.png'),
+                                                   map: textureLoader.load('qrc:images/earthcloudmapcolortrans.png'),
                                                    side: THREE.BackSide,
                                                    transparent: true,
                                                    opacity: 0.8
@@ -342,7 +364,7 @@ function createEarthCloud(earthMesh) {
     var mesh = new THREE.Mesh(commonGeometry, material);
 
     var material2 = new THREE.MeshPhongMaterial({
-                                                   map: THREE.ImageUtils.loadTexture('qrc:images/earthcloudmapcolortrans.png'),
+                                                   map: textureLoader.load('qrc:images/earthcloudmapcolortrans.png'),
                                                    side: THREE.FrontSide,
                                                    transparent: true,
                                                    opacity: 0.8
@@ -357,11 +379,12 @@ function createEarthCloud(earthMesh) {
 
 function createRing(radius, width, height, texture) {
 
+    var textureLoader = new THREE.TextureLoader();
     var geometry = new THREE.BufferGeometry().fromGeometry(
                 new THREEx.Planets._RingGeometry(radius, width, height));
 
     var material = new THREE.MeshPhongMaterial({
-                                                   map: THREE.ImageUtils.loadTexture(texture),
+                                                   map: textureLoader.load(texture),
                                                    side: THREE.DoubleSide,
                                                    transparent: true,
                                                    opacity: 0.8
@@ -376,7 +399,8 @@ function createRing(radius, width, height, texture) {
 
 function createStarfield(radius) {
 
-    var texture = THREE.ImageUtils.loadTexture('images/galaxy_starfield.png')
+    var textureLoader = new THREE.TextureLoader();
+    var texture = textureLoader.load('images/galaxy_starfield.png')
     var material = new THREE.MeshBasicMaterial({
                                                    map: texture,
                                                    side: THREE.BackSide
@@ -421,12 +445,14 @@ function setScale(value, focused) {
     for (var i = 0; i < objects.length; i++) {
         var object = objects[i];
         // first reset scale
-        object.scale.set(planets[i]["radius"], planets[i]["radius"], planets[i]["radius"]);
+        var radius = planets[i]["radius"];
+        object.scale.set(radius, radius, radius);
         if (i === SUN) {
             object.scale.multiplyScalar(planetScale / 100);
         } else {
             object.scale.multiplyScalar(planetScale);
         }
+        hitObjects[i].scale.set(object.scale.x, object.scale.y, object.scale.z);
     }
 
 }
@@ -533,21 +559,37 @@ function getNewCameraPosition( radius ) {
 
 function onDocumentMouseDown(x, y) {
 
-    // Mouse selection for planets and Solar system, not for the Moon
-
+    // Mouse selection for planets and Solar system, not for the Moon.
+    // Intersection tests are done against a set of cruder hit objects instead of
+    // actual planet meshes, as checking a lot of faces can be slow.
     mouse.set((x / planetCanvas.width) * 2 - 1, - (y / planetCanvas.height ) * 2 + 1);
 
     raycaster.setFromCamera(mouse, camera);
 
-    var intersects = raycaster.intersectObjects(objects);
+    var intersects = [];
+    var i = 0;
+    var objectCount = hitObjects.length - 1; // -1 excludes the moon, which is the last object
+    while (i < objectCount) {
+        // Update hitObject position
+        var objectPos = objects[i].position;
+        var hitObject = hitObjects[i];
+        hitObject.position.set(objectPos.x, objectPos.y, objectPos.z);
+        hitObject.updateMatrixWorld();
+
+        hitObject.raycast( raycaster, intersects );
+
+        i++;
+    }
+    intersects.sort( raycaster.ascSort );
+
     var selectedPlanet;
 
     if (intersects.length > 0) {
         var intersect = intersects[0];
 
-        var i = 0;
-        while (i < objects.length - 1) {
-            if (intersect.object === objects[i]) {
+        i = 0;
+        while (i < objectCount) {
+            if (intersect.object === hitObjects[i]) {
                 selectedPlanet = i;
                 break;
             }
@@ -633,8 +675,6 @@ function paintGL(canvas) {
         object.rotation.x = 0;
         object.rotation.y += (deltaTimeD / planet["period"]) * 2 * Math.PI;
         object.rotation.z = radians;
-        object.updateMatrix();
-
     }
 
     // rotate the Sun
@@ -643,7 +683,6 @@ function paintGL(canvas) {
     sun.rotation.x = 0;
     sun.rotation.y += (deltaTimeD / planets[SUN]["period"]) * 2 * Math.PI;
     sun.rotation.z = planets[SUN]["tilt"] * Math.PI / 180; // tilt in radians
-    sun.updateMatrix();
 
     // calculate the outer radius of the focused item
     var outerRadius = getOuterRadius(qmlView.focusedPlanet);
